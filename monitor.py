@@ -11,7 +11,7 @@ CHAT_ID = "5785936967"
 def send_telegram(message):
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
 
-    requests.post(
+    response = requests.post(
         url,
         data={
             "chat_id": CHAT_ID,
@@ -20,42 +20,99 @@ def send_telegram(message):
         timeout=20
     )
 
+    response.raise_for_status()
+
 
 def check_november_11(page):
-    page.goto(CALENDAR_URL, wait_until="networkidle", timeout=60000)
+
+    page.goto(
+        CALENDAR_URL,
+        wait_until="domcontentloaded",
+        timeout=60000
+    )
+
+    # Esperar a que el calendario realmente aparezca
+    page.wait_for_selector(
+        ".sc_cal_title",
+        state="visible",
+        timeout=60000
+    )
+
     time.sleep(3)
 
-    # Cambiar a vista mensual
-    page.locator(
+    # Buscar la vista mensual
+    month_button = page.locator(
         '.js_change[data-value="month"]'
-    ).dispatch_event("click")
+    )
 
-    time.sleep(3)
+    month_button.wait_for(
+        state="visible",
+        timeout=60000
+    )
+
+    # Click REAL
+    month_button.click()
+
+    # Esperar a que la vista mensual cargue
+    page.wait_for_selector(
+        ".sc_cal_month_itemlist",
+        state="visible",
+        timeout=60000
+    )
+
+    time.sleep(2)
 
     # Ir avanzando hasta noviembre 2026
     for _ in range(3):
-        month = page.locator(".sc_cal_title").inner_text()
+
+        month = page.locator(
+            ".sc_cal_title"
+        ).inner_text()
+
+        print(
+            f"Calendario actual: {month}",
+            flush=True
+        )
 
         if "2026年11月" in month:
             break
 
-        page.locator("a.js_change_date.next01").dispatch_event("click")
-        time.sleep(2)
+        next_button = page.locator(
+            "a.js_change_date.next01"
+        )
+
+        next_button.wait_for(
+            state="visible",
+            timeout=30000
+        )
+
+        next_button.click()
+
+        time.sleep(3)
 
     # Buscar el día 11
-    days = page.locator(".sc_cal_month_itemlist")
+    days = page.locator(
+        ".sc_cal_month_itemlist"
+    )
 
     for i in range(days.count()):
+
         day = days.nth(i)
 
-        date = day.locator(".sc_cal_date")
+        date = day.locator(
+            ".sc_cal_date"
+        )
 
         if date.count() == 0:
             continue
 
         if date.inner_text().strip() == "11":
 
-            available = day.locator(".c_cal_time_cell").count() > 0
+            available = (
+                day.locator(
+                    ".c_cal_time_cell"
+                ).count() > 0
+            )
 
             return available
 
@@ -64,7 +121,9 @@ def check_november_11(page):
 
 with sync_playwright() as p:
 
-    browser = p.chromium.launch(headless=True)
+    browser = p.chromium.launch(
+        headless=True
+    )
 
     page = browser.new_page()
 
@@ -73,6 +132,7 @@ with sync_playwright() as p:
     while True:
 
         try:
+
             available = check_november_11(page)
 
             print(
@@ -89,7 +149,10 @@ with sync_playwright() as p:
                     "Entra al sistema de la Embajada y revisa los horarios."
                 )
 
-                print("🚨 TELEGRAM ENVIADO", flush=True)
+                print(
+                    "🚨 TELEGRAM ENVIADO",
+                    flush=True
+                )
 
             last_state = available
 
